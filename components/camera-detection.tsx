@@ -20,7 +20,7 @@ export default function CameraDetection() {
   const [error, setError] = useState<string | null>(null)
   const [detectedObjects, setDetectedObjects] = useState<{ [key: string]: number }>({})
   const [connectionId, setConnectionId] = useState("")
-  const [cameraMode, setCameraMode] = useState<"local" | "remote">("local")
+  const [,setCameraMode] = useState<"local" | "remote">("local")
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
 
   // 検出された人のIDを追跡
