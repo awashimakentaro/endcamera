@@ -1,9 +1,9 @@
 "use client"
 
-import {  useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Camera, Smartphone } from 'lucide-react'
+import { Camera, Smartphone } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 
@@ -21,7 +21,7 @@ export default function CameraPage() {
       // iOSデバイスでは、シンプルな制約を使用
       const constraints = {
         video: true,
-        audio: false
+        audio: false,
       }
 
       // カメラへのアクセスを要求
@@ -34,9 +34,15 @@ export default function CameraPage() {
       }
 
       setError(null)
-    } catch (err) {
-      console.error("カメラの起動に失敗しました:", err)
-      setError("カメラの起動に失敗しました。カメラへのアクセス権限を確認してください。")
+    } catch (error: unknown) {
+      console.error("カメラの起動に失敗しました:", error)
+
+      let errorMessage = "カメラの起動に失敗しました。カメラへのアクセス権限を確認してください。"
+      if (error instanceof Error) {
+        errorMessage += ` (${error.message})`
+      }
+
+      setError(errorMessage)
     }
   }
 
@@ -60,8 +66,16 @@ export default function CameraPage() {
         body: JSON.stringify({ type: "reset", connectionId }),
       })
 
-      // RTCPeerConnectionの作成
-      const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }
+      // RTCPeerConnectionの作成（複数のSTUNサーバーを使用して接続の安定性を向上）
+      const configuration = {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun3.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:19302" },
+        ],
+      }
       const peerConnection = new RTCPeerConnection(configuration)
       peerConnectionRef.current = peerConnection
 
@@ -87,6 +101,11 @@ export default function CameraPage() {
         }
       }
 
+      // 接続状態の監視
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log("ICE接続状態:", peerConnection.iceConnectionState)
+      }
+
       // Offerの作成と送信
       const offer = await peerConnection.createOffer()
       await peerConnection.setLocalDescription(offer)
@@ -101,7 +120,7 @@ export default function CameraPage() {
         }),
       })
 
-      // Answerの待機
+      // Answerの待機（ポーリング間隔を3秒に延長して安定性を向上）
       const checkAnswer = async () => {
         const response = await fetch("/api/signaling", {
           method: "POST",
@@ -128,15 +147,21 @@ export default function CameraPage() {
             await peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
           }
         } else {
-          // Answerがまだない場合は再試行
-          setTimeout(checkAnswer, 1000)
+          // Answerがまだない場合は再試行（3秒後）
+          setTimeout(checkAnswer, 3000)
         }
       }
 
       checkAnswer()
-    } catch (err) {
-      console.error("ストリーミングの開始に失敗しました:", err)
-      setError("ストリーミングの開始に失敗しました。")
+    } catch (error: unknown) {
+      console.error("ストリーミングの開始に失敗しました:", error)
+
+      let errorMessage = "ストリーミングの開始に失敗しました。"
+      if (error instanceof Error) {
+        errorMessage += ` (${error.message})`
+      }
+
+      setError(errorMessage)
     }
   }
 
@@ -177,7 +202,9 @@ export default function CameraPage() {
         <CardContent>
           <div className="space-y-4">
             <div className="grid gap-2">
-              <label htmlFor="connectionId" className="text-sm font-medium">接続ID</label>
+              <label htmlFor="connectionId" className="text-sm font-medium">
+                接続ID
+              </label>
               <Input
                 id="connectionId"
                 placeholder="任意の接続IDを入力（例: camera1）"
@@ -188,9 +215,7 @@ export default function CameraPage() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <Button onClick={startCamera}>
-                カメラを起動
-              </Button>
+              <Button onClick={startCamera}>カメラを起動</Button>
             </div>
           </div>
         </CardContent>

@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { AlertCircle, Camera, Smartphone, Video } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function CameraDetection() {
@@ -20,7 +19,6 @@ export default function CameraDetection() {
   const [error, setError] = useState<string | null>(null)
   const [detectedObjects, setDetectedObjects] = useState<{ [key: string]: number }>({})
   const [connectionId, setConnectionId] = useState("")
-  const [,setCameraMode] = useState<"local" | "remote">("local")
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
 
   // 検出された人のIDを追跡
@@ -34,9 +32,15 @@ export default function CameraDetection() {
         const loadedModel = await cocossd.load()
         setModel(loadedModel)
         console.log("モデルが読み込まれました")
-      } catch (err) {
-        console.error("モデルの読み込みに失敗しました:", err)
-        setError("AIモデルの読み込みに失敗しました。ページを再読み込みしてください。")
+      } catch (error: unknown) {
+        console.error("モデルの読み込みに失敗しました:", error)
+
+        let errorMessage = "AIモデルの読み込みに失敗しました。ページを再読み込みしてください。"
+        if (error instanceof Error) {
+          errorMessage += ` (${error.message})`
+        }
+
+        setError(errorMessage)
       }
     }
 
@@ -71,9 +75,15 @@ export default function CameraDetection() {
         setError(null)
         detectFrame()
       }
-    } catch (err) {
-      console.error("カメラへのアクセスに失敗しました:", err)
-      setError("カメラへのアクセスに失敗しました。カメラの権限を確認してください。")
+    } catch (error: unknown) {
+      console.error("カメラへのアクセスに失敗しました:", error)
+
+      let errorMessage = "カメラへのアクセスに失敗しました。カメラの権限を確認してください。"
+      if (error instanceof Error) {
+        errorMessage += ` (${error.message})`
+      }
+
+      setError(errorMessage)
     }
   }
 
@@ -90,8 +100,16 @@ export default function CameraDetection() {
     }
 
     try {
-      // RTCPeerConnectionの作成
-      const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] }
+      // RTCPeerConnectionの作成（複数のSTUNサーバーを使用して接続の安定性を向上）
+      const configuration = {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun3.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:19302" },
+        ],
+      }
       const peerConnection = new RTCPeerConnection(configuration)
       peerConnectionRef.current = peerConnection
 
@@ -117,6 +135,19 @@ export default function CameraDetection() {
               payload: event.candidate,
             }),
           })
+        }
+      }
+
+      // 接続状態の監視
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log("ICE接続状態:", peerConnection.iceConnectionState)
+        if (
+          peerConnection.iceConnectionState === "failed" ||
+          peerConnection.iceConnectionState === "disconnected" ||
+          peerConnection.iceConnectionState === "closed"
+        ) {
+          setError("接続が切断されました。再接続してください。")
+          setIsRunning(false)
         }
       }
 
@@ -167,9 +198,15 @@ export default function CameraDetection() {
       }
 
       setError(null)
-    } catch (err) {
-      console.error("リモートカメラの接続に失敗しました:", err)
-      setError("リモートカメラの接続に失敗しました。接続IDを確認してください。")
+    } catch (error: unknown) {
+      console.error("リモートカメラの接続に失敗しました:", error)
+
+      let errorMessage = "リモートカメラの接続に失敗しました。接続IDを確認してください。"
+      if (error instanceof Error) {
+        errorMessage += ` (${error.message})`
+      }
+
+      setError(errorMessage)
     }
   }
 
@@ -238,7 +275,7 @@ export default function CameraDetection() {
               detectedPeopleRef.current.add(personId)
               setPeopleCount((prev) => prev + 1)
 
-              // 一定時間後にIDを削除（同じ人が再度カウントされるのを防ぐため）
+              // 一定時間後にIDを削除（同じ人が再度カウントされないように）
               setTimeout(() => {
                 detectedPeopleRef.current.delete(personId)
               }, 5000) // 5秒後に削除
@@ -263,9 +300,15 @@ export default function CameraDetection() {
       if (isRunning) {
         requestAnimationFrame(detectFrame)
       }
-    } catch (err) {
-      console.error("検出処理中にエラーが発生しました:", err)
-      setError("検出処理中にエラーが発生しました。")
+    } catch (error: unknown) {
+      console.error("検出処理中にエラーが発生しました:", error)
+
+      let errorMessage = "検出処理中にエラーが発生しました。"
+      if (error instanceof Error) {
+        errorMessage += ` (${error.message})`
+      }
+
+      setError(errorMessage)
     }
   }
 
@@ -282,7 +325,11 @@ export default function CameraDetection() {
       <Tabs
         defaultValue="local"
         className="w-full mb-6"
-        onValueChange={(value) => setCameraMode(value as "local" | "remote")}
+        onValueChange={(value) => {
+          if (isRunning) {
+            stopCamera()
+          }
+        }}
       >
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="local">ローカルカメラ</TabsTrigger>
@@ -309,7 +356,9 @@ export default function CameraDetection() {
         <TabsContent value="remote" className="space-y-4">
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="connectionId">接続ID</Label>
+              <label htmlFor="connectionId" className="text-sm font-medium">
+                接続ID
+              </label>
               <Input
                 id="connectionId"
                 placeholder="iPhoneと同じ接続IDを入力（例: camera1）"

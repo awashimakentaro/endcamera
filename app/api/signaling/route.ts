@@ -7,8 +7,24 @@ const connections: {
     offer?: RTCSessionDescriptionInit
     answer?: RTCSessionDescriptionInit
     candidates: RTCIceCandidateInit[]
+    lastUpdated: number
   }
 } = {}
+
+// 古い接続を定期的にクリーンアップ（24時間以上更新がない接続）
+const cleanupConnections = () => {
+  const now = Date.now()
+  const expirationTime = 24 * 60 * 60 * 1000 // 24時間
+
+  Object.keys(connections).forEach((id) => {
+    if (now - connections[id].lastUpdated > expirationTime) {
+      delete connections[id]
+    }
+  })
+}
+
+// 1時間ごとにクリーンアップを実行
+setInterval(cleanupConnections, 60 * 60 * 1000)
 
 export async function POST(request: Request) {
   const data = await request.json()
@@ -16,7 +32,13 @@ export async function POST(request: Request) {
 
   // 接続IDがない場合は初期化
   if (!connections[connectionId]) {
-    connections[connectionId] = { candidates: [] }
+    connections[connectionId] = {
+      candidates: [],
+      lastUpdated: Date.now(),
+    }
+  } else {
+    // 既存の接続の最終更新時間を更新
+    connections[connectionId].lastUpdated = Date.now()
   }
 
   switch (type) {
@@ -36,7 +58,10 @@ export async function POST(request: Request) {
     case "get-candidates":
       return NextResponse.json({ candidates: connections[connectionId]?.candidates || [] })
     case "reset":
-      connections[connectionId] = { candidates: [] }
+      connections[connectionId] = {
+        candidates: [],
+        lastUpdated: Date.now(),
+      }
       return NextResponse.json({ success: true })
     default:
       return NextResponse.json({ error: "Invalid type" }, { status: 400 })
